@@ -20,7 +20,9 @@ get_model() {
         x) echo "x-ai/grok-4-fast:nitro" ;;
         d) echo "deepseek/deepseek-v3.2:nitro" ;;
         q) echo "qwen/qwen3-235b-a22b-07-25:nitro" ;;
-        o) echo "openai/gpt-5.2:nitro" ;;
+        o) echo "openai/gpt-5.4:nitro" ;;
+        opus) echo "anthropic/claude-opus-4.6:nitro" ;;
+        codex) echo "openai/gpt-5.3-codex:nitro" ;;
     esac
 }
 
@@ -31,6 +33,9 @@ PROMPT=""
 STREAMING=false
 NO_SYSTEM=false
 PROVIDER_ORDER=""
+QUIET=false
+JSON_OUTPUT=false
+FILE_CONTEXTS=()
 
 # Default system prompt (direct answers)
 DEFAULT_PROMPT="You are a direct answer engine. Output ONLY the requested information.
@@ -49,33 +54,89 @@ Rules:
 
 # Function to show help
 show_help() {
-    cat << EOF
-ask - Query AI models via OpenRouter API
+    cat << 'EOF'
+ask - Query AI models via the OpenRouter API.
 
-Usage: ask [OPTIONS] [PROMPT]
+ask sends a prompt to an AI model and prints the response to stdout. It is
+optimized for short, direct answers: commands, code snippets, and facts.
+By default a system prompt instructs the model to return only the requested
+information with no markdown, no commentary, and no code fences.
 
-Options:
-  -c          Use inception/mercury-coder
-  -g          Use google/gemini-3-flash-preview
-  -s          Use anthropic/claude-sonnet-4.6 (default)
-  -x          Use x-ai/grok-4-fast
-  -d          Use deepseek/deepseek-v3.2
-  -q          Use qwen/qwen3-235b-a22b-07-25
-  -o          Use openai/gpt-5.2
-  -m MODEL    Use custom model
-  -r          Disable system prompt (raw model behavior)
-  --stream    Enable streaming output
-  --system    Set system prompt for the conversation
-  --provider  Comma-separated list of providers for routing
-  -h, --help  Show this help message
+Usage:
+  ask [OPTIONS] [PROMPT]
+  echo "text" | ask [OPTIONS]
+  echo "text" | ask [OPTIONS] "additional instructions"
+
+When no PROMPT argument is given, ask reads from stdin. When both stdin and
+a PROMPT argument are provided, stdin content is prepended to the prompt.
+
+Model selection:
+  -s            Claude Sonnet 4.6 (default) - strong reasoning
+  -o            GPT-5.4 - latest OpenAI flagship
+  -opus         Claude Opus 4.6 - strongest Anthropic model
+  -codex        GPT-5.3 Codex - optimized for code generation
+  -c            Mercury Coder - fast code generation
+  -g            Gemini 3 Flash Preview - fast, general purpose
+  -x            Grok 4 Fast - xAI model
+  -d            DeepSeek V3.2 - efficient reasoning
+  -q            Qwen3 235B - large open model
+  -m MODEL      Any OpenRouter model ID (e.g. openai/gpt-5.4)
+
+File context:
+  -f FILE       Include file contents in the prompt. Repeatable.
+                Files are prepended with a header showing the path.
+
+Output control:
+  --stream      Stream response tokens as they arrive
+  --json        Print the raw JSON API response instead of extracted text
+  -Q            Quiet mode - suppress the metadata footer on stderr
+
+Prompt control:
+  --system MSG  Set a custom system prompt
+  -r            Disable the system prompt entirely (raw model behavior)
+
+Provider routing:
+  --provider P  Comma-separated provider order for fallback routing
+
+Other:
+  -h, --help    Show this help message
+
+Behavior:
+  The metadata footer (model name, provider, latency, tokens/sec) is printed
+  to stderr so it does not interfere with piped output. Use -Q to suppress it.
+  Errors are also printed to stderr and cause a non-zero exit code.
 
 Examples:
-  ask "Write a hello world in Python"
-  ask -g "Explain quantum computing"
-  ask -m openai/gpt-4o "What is 2+2?"
-  echo "Fix this code" | ask
-  ask --system "You are a pirate" "Tell me about sailing"
+  # Get a command
+  ask ffmpeg command to convert mp4 to gif
 
+  # Use a specific model
+  ask -o "explain this error" < error.log
+
+  # Include files for context
+  ask -f src/main.py -f src/utils.py "find the bug in main.py"
+
+  # Pipe input
+  git diff | ask "review this diff for issues"
+  cat script.py | ask "add error handling"
+
+  # Chain with other tools
+  ask "list all .env keys used in this project" | sort
+
+  # Custom system prompt
+  ask --system "You are a security auditor" -f app.py "audit this"
+
+  # Raw model output (no system prompt)
+  ask -r "write a haiku about bash"
+
+  # Streaming for long responses
+  ask --stream -opus "explain the Linux boot process"
+
+  # Get raw JSON response for scripting
+  ask --json "what is 2+2" | jq '.usage'
+
+  # Quiet mode (no metadata footer)
+  ask -Q "capital of france"
 EOF
     exit 0
 }
@@ -84,6 +145,9 @@ EOF
 while [ $# -gt 0 ]; do
     case "$1" in
         -h|--help) show_help ;;
+        -opus|-codex)
+            MODEL="$(get_model "${1:1}")"
+            shift ;;
         -[cgsdqxo])
             MODEL="$(get_model "${1:1}")"
             shift ;;
@@ -93,8 +157,17 @@ while [ $# -gt 0 ]; do
         -r)
             NO_SYSTEM=true
             shift ;;
+        -f)
+            FILE_CONTEXTS+=("${2:?Error: -f requires a file path}")
+            shift 2 ;;
+        -Q)
+            QUIET=true
+            shift ;;
         --stream)
             STREAMING=true
+            shift ;;
+        --json)
+            JSON_OUTPUT=true
             shift ;;
         --system)
             SYSTEM_PROMPT="${2:?Error: --system requires a prompt}"
@@ -116,6 +189,22 @@ if [ -z "$PROMPT" ]; then
     fi
     # Read all stdin, preserving multi-line format
     PROMPT=$(cat)
+fi
+
+# Prepend file contents to prompt
+if [ ${#FILE_CONTEXTS[@]} -gt 0 ]; then
+    FILE_CONTENT=""
+    for file in "${FILE_CONTEXTS[@]}"; do
+        if [ ! -f "$file" ]; then
+            echo "Error: File not found: $file" >&2
+            exit 1
+        fi
+        FILE_CONTENT+="--- FILE: $file ---
+$(cat "$file")
+
+"
+    done
+    PROMPT="${FILE_CONTENT}${PROMPT}"
 fi
 
 # Apply default system prompt unless disabled or custom prompt provided
@@ -175,9 +264,11 @@ if [ "$STREAMING" = true ]; then
     echo
 
     # Show metadata
-    ELAPSED=$(printf "%.2f" $(echo "$(date +%s.%N) - $START_TIME" | bc))
-    echo
-    echo "[$MODEL - ${ELAPSED}s]" >&2
+    if [ "$QUIET" = false ]; then
+        ELAPSED=$(printf "%.2f" $(echo "$(date +%s.%N) - $START_TIME" | bc))
+        echo
+        echo "[$MODEL - ${ELAPSED}s]" >&2
+    fi
 else
     # Non-streaming mode
     response=$(curl -sS "$API_URL" \
@@ -191,15 +282,22 @@ else
         exit 1
     fi
 
-    # Extract and print content
-    echo "$response" | jq -r '.choices[0].message.content // "No response received"'
+    if [ "$JSON_OUTPUT" = true ]; then
+        # Raw JSON output
+        echo "$response" | jq .
+    else
+        # Extract and print content
+        echo "$response" | jq -r '.choices[0].message.content // "No response received"'
+    fi
 
     # Show metadata
-    ELAPSED=$(printf "%.2f" $(echo "$(date +%s.%N) - $START_TIME" | bc))
-    TOKENS=$(echo "$response" | jq -r '.usage.completion_tokens // 0')
-    PROVIDER=$(echo "$response" | jq -r '.provider // "Unknown"')
-    TPS=$(echo "scale=1; $TOKENS / $ELAPSED" | bc 2>/dev/null || echo "0.0")
+    if [ "$QUIET" = false ]; then
+        ELAPSED=$(printf "%.2f" $(echo "$(date +%s.%N) - $START_TIME" | bc))
+        TOKENS=$(echo "$response" | jq -r '.usage.completion_tokens // 0')
+        PROVIDER=$(echo "$response" | jq -r '.provider // "Unknown"')
+        TPS=$(echo "scale=1; $TOKENS / $ELAPSED" | bc 2>/dev/null || echo "0.0")
 
-    echo
-    echo "[$MODEL via $PROVIDER - ${ELAPSED}s - ${TPS} tok/s]" >&2
+        echo
+        echo "[$MODEL via $PROVIDER - ${ELAPSED}s - ${TPS} tok/s]" >&2
+    fi
 fi
