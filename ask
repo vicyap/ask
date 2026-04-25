@@ -14,14 +14,14 @@ fi
 # Model shortcuts function
 get_model() {
     case "$1" in
-        c) echo "inception/mercury-coder:nitro" ;;
+        c) echo "inception/mercury-2:nitro" ;;
         g) echo "google/gemini-3-flash-preview:nitro" ;;
         s) echo "anthropic/claude-sonnet-4.6:nitro" ;;
-        x) echo "x-ai/grok-4-fast:nitro" ;;
-        d) echo "deepseek/deepseek-v3.2:nitro" ;;
-        q) echo "qwen/qwen3-235b-a22b-07-25:nitro" ;;
-        o) echo "openai/gpt-5.4:nitro" ;;
-        opus) echo "anthropic/claude-opus-4.6:nitro" ;;
+        x) echo "x-ai/grok-4.1-fast:nitro" ;;
+        d) echo "deepseek/deepseek-v4-flash:nitro" ;;
+        q) echo "qwen/qwen3.5-397b-a17b:nitro" ;;
+        o) echo "openai/gpt-5.5:nitro" ;;
+        opus) echo "anthropic/claude-opus-4.7:nitro" ;;
         codex) echo "openai/gpt-5.3-codex:nitro" ;;
     esac
 }
@@ -72,15 +72,15 @@ a PROMPT argument are provided, stdin content is prepended to the prompt.
 
 Model selection:
   -s            Claude Sonnet 4.6 (default) - strong reasoning
-  -o            GPT-5.4 - latest OpenAI flagship
-  -opus         Claude Opus 4.6 - strongest Anthropic model
+  -o            GPT-5.5 - latest OpenAI flagship
+  -opus         Claude Opus 4.7 - strongest Anthropic model
   -codex        GPT-5.3 Codex - optimized for code generation
-  -c            Mercury Coder - fast code generation
+  -c            Mercury 2 - fast reasoning diffusion
   -g            Gemini 3 Flash Preview - fast, general purpose
-  -x            Grok 4 Fast - xAI model
-  -d            DeepSeek V3.2 - efficient reasoning
-  -q            Qwen3 235B - large open model
-  -m MODEL      Any OpenRouter model ID (e.g. openai/gpt-5.4)
+  -x            Grok 4.1 Fast - xAI agentic tool calling
+  -d            DeepSeek V4 Flash - efficient MoE reasoning
+  -q            Qwen3.5 397B - large open vision-language MoE
+  -m MODEL      Any OpenRouter model ID (e.g. openai/gpt-5.5)
 
 File context:
   -f FILE       Include file contents in the prompt. Repeatable.
