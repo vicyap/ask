@@ -86,6 +86,16 @@ echo "Fix this code: print('hello world)" | ask
 cat script.py | ask "Review this code"
 ```
 
+### Self-update
+
+```bash
+ask update
+```
+
+Replaces the running `ask` script in place with the latest version
+from `vicyap/ask@main`. Refuses to run when the script lives inside a
+git working tree — use `git pull` there instead.
+
 ## Options
 
 | Option | Description |

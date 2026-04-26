@@ -5,6 +5,53 @@
 
 set -euo pipefail
 
+ASK_UPDATE_URL="https://raw.githubusercontent.com/vicyap/ask/main/ask"
+
+ask_update() {
+    local target target_dir
+    target_dir="$(cd "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+    target="$target_dir/$(basename -- "${BASH_SOURCE[0]}")"
+
+    if git -C "$target_dir" rev-parse --git-dir >/dev/null 2>&1; then
+        echo "Refusing to overwrite $target — it is inside a git working tree." >&2
+        echo "Run 'git pull' from $target_dir instead." >&2
+        exit 1
+    fi
+
+    tmpfile="$(mktemp)"
+    trap 'rm -f "${tmpfile:-}"' EXIT
+
+    echo "Fetching latest ask from $ASK_UPDATE_URL..." >&2
+    if ! curl -fsSL "$ASK_UPDATE_URL" -o "$tmpfile"; then
+        echo "Error: download failed" >&2
+        exit 1
+    fi
+
+    if ! head -n1 "$tmpfile" | grep -qE '^#!.*\b(bash|sh)\b'; then
+        echo "Error: downloaded file does not look like a shell script" >&2
+        exit 1
+    fi
+
+    if cmp -s "$tmpfile" "$target"; then
+        echo "ask is already up to date." >&2
+        exit 0
+    fi
+
+    chmod +x "$tmpfile"
+    if ! mv -f "$tmpfile" "$target" 2>/dev/null; then
+        echo "Error: cannot write to $target (permission denied?)" >&2
+        echo "Try: sudo $target update" >&2
+        exit 1
+    fi
+
+    echo "✓ ask updated at $target" >&2
+}
+
+if [ "${1:-}" = "update" ]; then
+    ask_update
+    exit 0
+fi
+
 # Check for API key
 if [ -z "${OPENROUTER_API_KEY:-}" ]; then
     echo "Error: OPENROUTER_API_KEY environment variable is not set" >&2
@@ -100,6 +147,10 @@ Provider routing:
 
 Other:
   -h, --help    Show this help message
+
+Subcommands:
+  update        Update ask in place by downloading the latest version
+                from https://github.com/vicyap/ask
 
 Behavior:
   The metadata footer (model name, provider, latency, tokens/sec) is printed
