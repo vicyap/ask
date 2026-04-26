@@ -89,7 +89,7 @@ cat script.py | ask "Review this code"
 ### Self-update
 
 ```bash
-ask update
+ask -u          # or: ask --update
 ```
 
 Replaces the running `ask` script in place with the latest version

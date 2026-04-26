@@ -40,23 +40,12 @@ ask_update() {
     chmod +x "$tmpfile"
     if ! mv -f "$tmpfile" "$target" 2>/dev/null; then
         echo "Error: cannot write to $target (permission denied?)" >&2
-        echo "Try: sudo $target update" >&2
+        echo "Try: sudo $target -u" >&2
         exit 1
     fi
 
     echo "✓ ask updated at $target" >&2
 }
-
-if [ "${1:-}" = "update" ]; then
-    ask_update
-    exit 0
-fi
-
-# Check for API key
-if [ -z "${OPENROUTER_API_KEY:-}" ]; then
-    echo "Error: OPENROUTER_API_KEY environment variable is not set" >&2
-    exit 1
-fi
 
 # Model shortcuts function
 get_model() {
@@ -147,9 +136,7 @@ Provider routing:
 
 Other:
   -h, --help    Show this help message
-
-Subcommands:
-  update        Update ask in place by downloading the latest version
+  -u, --update  Update ask in place by downloading the latest version
                 from https://github.com/vicyap/ask
 
 Behavior:
@@ -196,6 +183,7 @@ EOF
 while [ $# -gt 0 ]; do
     case "$1" in
         -h|--help) show_help ;;
+        -u|--update) ask_update; exit 0 ;;
         -opus|-codex)
             MODEL="$(get_model "${1:1}")"
             shift ;;
@@ -231,6 +219,12 @@ while [ $# -gt 0 ]; do
             break ;;
     esac
 done
+
+# Check for API key (after parsing so -u/--update can short-circuit without one)
+if [ -z "${OPENROUTER_API_KEY:-}" ]; then
+    echo "Error: OPENROUTER_API_KEY environment variable is not set" >&2
+    exit 1
+fi
 
 # If no prompt provided as argument, read from stdin
 if [ -z "$PROMPT" ]; then
